@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบแจ้งซ่อมและติดตามสถานะ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Sarabun', sans-serif;
+        }
+        
+        .notification {
+            animation: fadeIn 0.5s, fadeOut 0.5s 2.5s forwards;
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 50;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-20px); }
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .status-pending {
+            background-color: #FEF3C7;
+            color: #92400E;
+        }
+        
+        .status-progress {
+            background-color: #DBEAFE;
+            color: #1E40AF;
+        }
+        
+        .status-completed {
+            background-color: #D1FAE5;
+            color: #065F46;
+        }
+        
+        .status-cancelled {
+            background-color: #FEE2E2;
+            color: #B91C1C;
+        }
+        
+        .modal {
+            transition: opacity 0.3s ease;
+        }
+        
+        .pagination-btn {
+            padding: 0.25rem 0.75rem;
+            border: 1px solid #E5E7EB;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        
+        .pagination-btn.active {
+            background-color: #2563EB;
+            color: white;
+            border-color: #2563EB;
+        }
+        
+        .pagination-btn:hover:not(.active):not(:disabled) {
+            background-color: #F3F4F6;
+        }
+        
+        .pagination-btn:disabled {
+            color: #9CA3AF;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- Notification -->
+    <div id="notification" class="notification hidden">
+        <div class="bg-green-500 text-white px-4 py-3 rounded-lg shadow-lg flex items-center">
+            <i class="fas fa-check-circle mr-2"></i>
+            <span id="notification-message"></span>
+        </div>
+    </div>
+
+    <!-- Login Section -->
+    <div id="login-section" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+            <div class="text-center mb-6">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
+                    <i class="fas fa-tools text-blue-600 text-2xl"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800">ระบบแจ้งซ่อมและติดตามสถานะ</h1>
+                <p class="text-gray-600 mt-2">กรุณาเข้าสู่ระบบเพื่อดำเนินการ</p>
+            </div>
+            
+            <form id="login-form">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อผู้ใช้</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-gray-400"></i>
+                        </div>
+                        <input type="text" id="username" class="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกชื่อผู้ใช้">
+                    </div>
+                    <p id="username-error" class="text-red-500 text-xs mt-1 hidden">กรุณากรอกชื่อผู้ใช้</p>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-lock text-gray-400"></i>
+                        </div>
+                        <input type="password" id="password" class="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกรหัสผ่าน">
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                            <button type="button" id="toggle-password" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p id="password-error" class="text-red-500 text-xs mt-1 hidden">กรุณากรอกรหัสผ่าน</p>
+                </div>
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex items-center">
+                        <input type="checkbox" id="remember-me" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                        <label for="remember-me" class="ml-2 block text-sm text-gray-700">จดจำฉัน</label>
+                    </div>
+                    <a href="#" class="text-sm text-blue-600 hover:text-blue-800">ลืมรหัสผ่าน?</a>
+                </div>
+                <button type="button" id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-sign-in-alt mr-2"></i>
+                    <span>เข้าสู่ระบบ</span>
+                </button>
+                <p id="login-error" class="text-red-500 text-sm mt-2 text-center hidden">ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง</p>
+            </form>
+            
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-600">หรือ</p>
+                <button id="public-repair-btn" class="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-tools mr-2"></i>
+                    <span>แจ้งซ่อมโดยไม่ต้องเข้าสู่ระบบ</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard-section" class="hidden">
+        <div class="flex h-screen bg-gray-100">
+            <!-- Sidebar -->
+            <div id="sidebar" class="bg-blue-800 text-white w-64 flex-shrink-0 overflow-y-auto">
+                <div class="p-4 flex flex-col h-full">
+                    <div class="flex items-center space-x-2 mb-8">
+                        <i class="fas fa-tools text-2xl"></i>
+                        <h1 class="text-xl font-bold">ระบบแจ้งซ่อม</h1>
+                    </div>
+                    
+                    <div id="user-info" class="flex items-center space-x-3 mb-6 p-3 bg-blue-700 rounded-lg">
+                        <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+                            <span id="user-initial" class="text-lg font-bold">A</span>
+                        </div>
+                        <div>
+                            <p id="user-name" class="font-medium">Admin</p>
+                            <p id="user-role" class="text-xs text-blue-200">ผู้ดูแลระบบ</p>
+                        </div>
+                    </div>
+                    
+                    <nav class="space-y-1 flex-grow">
+                        <a href="#" class="nav-link flex items-center space-x-3 p-3 rounded-lg bg-blue-700" data-tab="dashboard-tab">
+                            <i class="fas fa-chart-line w-5 text-center"></i>
+                            <span>แดชบอร์ด</span>
+                        </a>
+                        
+                        <a href="#" class="nav-link flex items-center space-x-3 p-3 rounded-lg hover:bg-blue-700" data-tab="repair-tab">
+                            <i class="fas fa-wrench w-5 text-center"></i>
+                            <span>แจ้งซ่อม</span>
+                        </a>
+                        
+                        <a href="#" class="nav-link flex items-center space-x-3 p-3 rounded-lg hover:bg-blue-700" data-tab="tasks-tab">
+                            <i class="fas fa-tasks w-5 text-center"></i>
+                            <span>งานซ่อม</span>
+                        </a>
+                        
+                        <a href="#" class="nav-link flex items-center space-x-3 p-3 rounded-lg hover:bg-blue-700" data-tab="users-tab">
+                            <i class="fas fa-users w-5 text-center"></i>
+                            <span>จัดการผู้ใช้</span>
+                        </a>
+                        
+                        <a href="#" class="nav-link flex items-center space-x-3 p-3 rounded-lg hover:bg-blue-700" data-tab="settings-tab">
+                            <i class="fas fa-cog w-5 text-center"></i>
+                            <span>ตั้งค่า</span>
+                        </a>
+                    </nav>
+                    
+                    <div class="mt-auto pt-4">
+                        <a href="#" id="logout-btn" class="flex items-center space-x-3 p-3 rounded-lg hover:bg-red-600">
+                            <i class="fas fa-sign-out-alt w-5 text-center"></i>
+                            <span>ออกจากระบบ</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+                <!-- Top Header -->
+                <header class="bg-white shadow-sm p-4">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center">
+                            <button id="mobile-menu-btn" class="mr-4 text-gray-600 lg:hidden">
+                                <i class="fas fa-bars text-xl"></i>
+                            </button>
+                            <h1 id="page-title" class="text-xl font-semibold text-gray-800">แดชบอร์ด</h1>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <button id="notification-btn" class="relative p-2 rounded-full hover:bg-gray-100">
+                                <i class="fas fa-bell text-gray-600"></i>
+                                <span class="absolute top-0 right-0 h-5 w-5 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">3</span>
+                            </button>
+                            <div class="relative" id="user-dropdown">
+                                <button class="flex items-center space-x-2 focus:outline-none">
+                                    <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white">
+                                        <span>A</span>
+                                    </div>
+                                    <span class="text-gray-700 hidden md:inline-block">Admin</span>
+                                    <i class="fas fa-chevron-down text-gray-500 text-xs"></i>
+                                </button>
+                                <div id="user-dropdown-menu" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 hidden">
+                                    <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                        <i class="fas fa-user mr-2"></i> โปรไฟล์
+                                    </a>
+                                    <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                        <i class="fas fa-cog mr-2"></i> ตั้งค่า
+                                    </a>
+                                    <hr class="my-1 border-gray-200">
+                                    <a href="#" class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100" id="dropdown-logout">
+                                        <i class="fas fa-sign-out-alt mr-2"></i> ออกจากระบบ
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+                
+                <!-- Content Area -->
+                <main class="flex-1 overflow-y-auto p-4">
+                    <!-- Dashboard Tab -->
+                    <div id="dashboard-tab" class="tab-content active">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-white rounded-lg shadow p-4">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <p class="text-gray-500 text-sm">งานแจ้งซ่อมทั้งหมด</p>
+                                        <h2 class="text-2xl font-bold text-gray-800">128</h2>
+                                    </div>
+                                    <div class="bg-blue-100 p-3 rounded-full">
+                                        <i class="fas fa-tools text-blue-600"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-2 flex items-center">
+                                    <span class="text-green-500 flex items-center text-sm">
+                                        <i class="fas fa-arrow-up mr-1"></i> 12%
+                                    </span>
+                                    <span class="text-gray-500 text-sm ml-2">จากเดือนที่แล้ว</span>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-lg shadow p-4">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <p class="text-gray-500 text-sm">งานที่กำลังดำเนินการ</p>
+                                        <h2 class="text-2xl font-bold text-gray-800">42</h2>
+                                    </div>
+                                    <div class="bg-yellow-100 p-3 rounded-full">
+                                        <i class="fas fa-spinner text-yellow-600"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-2 flex items-center">
+                                    <span class="text-red-500 flex items-center text-sm">
+                                        <i class="fas fa-arrow-up mr-1"></i> 8%
+                                    </span>
+                                    <span class="text-gray-500 text-sm ml-2">จากเดือนที่แล้ว</span>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-lg shadow p-4">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <p class="text-gray-500 text-sm">งานที่เสร็จสิ้น</p>
+                                        <h2 class="text-2xl font-bold text-gray-800">86</h2>
+                                    </div>
+                                    <div class="bg-green-100 p-3 rounded-full">
+                                        <i class="fas fa-check-circle text-green-600"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-2 flex items-center">
+                                    <span class="text-green-500 flex items-center text-sm">
+                                        <i class="fas fa-arrow-up mr-1"></i> 16%
+                                    </span>
+                                    <span class="text-gray-500 text-sm ml-2">จากเดือนที่แล้ว</span>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-lg shadow p-4">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <p class="text-gray-500 text-sm">ประสิทธิภาพการซ่อม</p>
+                                        <h2 class="text-2xl font-bold text-gray-800">92%</h2>
+                                    </div>
+                                    <div class="bg-purple-100 p-3 rounded-full">
+                                        <i class="fas fa-chart-pie text-purple-600"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-2 flex items-center">
+                                    <span class="text-green-500 flex items-center text-sm">
+                                        <i class="fas fa-arrow-up mr-1"></i> 3%
+                                    </span>
+                                    <span class="text-gray-500 text-sm ml-2">จากเดือนที่แล้ว</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div class="bg-white rounded-lg shadow p-4 lg:col-span-2">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-semibold text-gray-800">งานแจ้งซ่อมล่าสุด</h3>
+                                    <a href="#" class="text-blue-600 hover:text-blue-800 text-sm" data-tab="repair-tab">ดูทั้งหมด</a>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full">
+                                        <thead>
+                                            <tr class="bg-gray-50">
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รหัส</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อุปกรณ์</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ผู้แจ้ง</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="bg-white divide-y divide-gray-200">
+                                            <tr>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">REP-2023-0128</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">เครื่องปรับอากาศ</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">วิชัย มานะ</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">15/05/2023</td>
+                                                <td class="px-4 py-2 whitespace-nowrap">
+                                                    <span class="status-badge status-pending">รอดำเนินการ</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">REP-2023-0127</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">คอมพิวเตอร์</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">สมศรี ใจดี</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">14/05/2023</td>
+                                                <td class="px-4 py-2 whitespace-nowrap">
+                                                    <span class="status-badge status-progress">กำลังดำเนินการ</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">REP-2023-0126</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">เครื่องพิมพ์</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">มานี มีสุข</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">13/05/2023</td>
+                                                <td class="px-4 py-2 whitespace-nowrap">
+                                                    <span class="status-badge status-completed">เสร็จสิ้น</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">REP-2023-0125</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">โทรศัพท์</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">สมชาย ใจดี</td>
+                                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">12/05/2023</td>
+                                                <td class="px-4 py-2 whitespace-nowrap">
+                                                    <span class="status-badge status-cancelled">ยกเลิก</span>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-lg shadow p-4">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-semibold text-gray-800">สรุปงานซ่อม</h3>
+                                </div>
+                                <div class="h-64">
+                                    <canvas id="repair-chart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Repair Tab -->
+                    <div id="repair-tab" class="tab-content">
+                        <div class="bg-white rounded-lg shadow mb-4">
+                            <div class="p-4">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h2 class="text-lg font-semibold text-gray-800">รายการแจ้งซ่อม</h2>
+                                    <button class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center" id="new-repair-btn">
+                                        <i class="fas fa-plus mr-2"></i>
+                                        <span>แจ้งซ่อมใหม่</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="flex flex-wrap gap-2 mb-4">
+                                    <div class="relative">
+                                        <input type="text" id="repair-search" placeholder="ค้นหา..." class="border border-gray-300 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                                    </div>
+                                    <select id="repair-status-filter" class="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="all">สถานะทั้งหมด</option>
+                                        <option value="pending">รอดำเนินการ</option>
+                                        <option value="progress">กำลังดำเนินการ</option>
+                                        <option value="completed">เสร็จสิ้น</option>
+                                        <option value="cancelled">ยกเลิก</option>
+                                    </select>
+                                    <select id="repair-type-filter" class="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="all">ประเภทอุปกรณ์ทั้งหมด</option>
+                                        <option value="computer">คอมพิวเตอร์</option>
+                                        <option value="printer">เครื่องพิมพ์</option>
+                                        <option value="network">อุปกรณ์เครือข่าย</option>
+                                        <option value="ac">เครื่องปรับอากาศ</option>
+                                        <option value="electrical">อุปกรณ์ไฟฟ้า</option>
+                                        <option value="furniture">เฟอร์นิเจอร์</option>
+                                        <option value="other">อื่นๆ</option>
+                                    </select>
+                                    <button id="repair-filter-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg flex items-center">
+                                        <i class="fas fa-filter mr-2"></i>
+                                        <span>กรอง</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full" id="repair-table">
+                                        <thead>
+                                            <tr class="bg-gray-50">
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รหัส</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อุปกรณ์</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ปัญหา</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ผู้แจ้ง</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่แจ้ง</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="bg-white divide-y divide-gray-200" id="repair-table-body">
+                                            <!-- จะถูกเติมด้วย JavaScript -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div class="mt-4 flex justify-between items-center">
+                                    <p class="text-sm text-gray-500" id="repair-pagination-info">แสดง 1-10 จาก 128 รายการ</p>
+                                    <div class="flex space-x-1" id="repair-pagination">
+                                        <button class="pagination-btn" id="repair-prev-btn" disabled>ก่อนหน้า</button>
+                                        <button class="pagination-btn active" data-page="1">1</button>
+                                        <button class="pagination-btn" data-page="2">2</button>
+                                        <button class="pagination-btn" data-page="3">3</button>
+                                        <button class="pagination-btn" id="repair-next-btn">ถัดไป</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tasks Tab -->
+                    <div id="tasks-tab" class="tab-content">
+                        <div class="bg-white rounded-lg shadow mb-4">
+                            <div class="p-4">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h2 class="text-lg font-semibold text-gray-800">งานซ่อม</h2>
+                                    <div class="flex space-x-2">
+                                        <button class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center" id="assign-task-btn">
+                                            <i class="fas fa-user-plus mr-2"></i>
+                                            <span>มอบหมายงาน</span>
+                                        </button>
+                                        <button class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg flex items-center" id="export-tasks-btn">
+                                            <i class="fas fa-file-export mr-2"></i>
+                                            <span>ส่งออก Excel</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex flex-wrap gap-2 mb-4">
+                                    <div class="relative">
+                                        <input type="text" id="tasks-search" placeholder="ค้นหา..." class="border border-gray-300 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                                    </div>
+                                    <select id="tasks-status-filter" class="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="all">สถานะทั้งหมด</option>
+                                        <option value="pending">รอดำเนินการ</option>
+                                        <option value="progress">กำลังดำเนินการ</option>
+                                        <option value="completed">เสร็จสิ้น</option>
+                                        <option value="cancelled">ยกเลิก</option>
+                                    </select>
+                                    <select id="tasks-tech-filter" class="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="all">ช่างซ่อมทั้งหมด</option>
+                                        <option value="tech1">สมศักดิ์ ช่างดี</option>
+                                        <option value="tech2">วิชัย ช่างเก่ง</option>
+                                        <option value="tech3">มานะ ช่างเทคนิค</option>
+                                    </select>
+                                    <button id="tasks-filter-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg flex items-center">
+                                        <i class="fas fa-filter mr-2"></i>
+                                        <span>กรอง</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full" id="tasks-table">
+                                        <thead>
+                                            <tr class="bg-gray-50">
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    <div class="flex items-center">
+                                                        <input type="checkbox" id="select-all-tasks" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                                                    </div>
+                                                </th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รหัส</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อุปกรณ์</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ผู้แจ้ง</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ช่างซ่อม</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">กำหนดเสร็จ</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="bg-white divide-y divide-gray-200" id="tasks-table-body">
+                                            <!-- จะถูกเติมด้วย JavaScript -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div class="mt-4 flex justify-between items-center">
+                                    <p class="text-sm text-gray-500" id="tasks-pagination-info">แสดง 1-10 จาก 128 รายการ</p>
+                                    <div class="flex space-x-1" id="tasks-pagination">
+                                        <button class="pagination-btn" id="tasks-prev-btn" disabled>ก่อนหน้า</button>
+                                        <button class="pagination-btn active" data-page="1">1</button>
+                                        <button class="pagination-btn" data-page="2">2</button>
+                                        <button class="pagination-btn" data-page="3">3</button>
+                                        <button class="pagination-btn" id="tasks-next-btn">ถัดไป</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Users Tab -->
+                    <div id="users-tab" class="tab-content">
+                        <div class="bg-white rounded-lg shadow mb-4">
+                            <div class="p-4">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h2 class="text-lg font-semibold text-gray-800">จัดการผู้ใช้งาน</h2>
+                                    <div class="flex space-x-2">
+                                        <div class="relative">
+                                            <input type="text" id="users-search" placeholder="ค้นหา..." class="border border-gray-300 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                                        </div>
+                                        <button class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center" id="add-user-btn">
+                                            <i class="fas fa-plus mr-2"></i>
+                                            <span>เพิ่มผู้ใช้</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full" id="users-table">
+                                        <thead>
+                                            <tr class="bg-gray-50">
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อผู้ใช้</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ-นามสกุล</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อีเมล</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">แผนก/ฝ่าย</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">บทบาท</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="bg-white divide-y divide-gray-200" id="users-table-body">
+                                            <!-- จะถูกเติมด้วย JavaScript -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div class="mt-4 flex justify-between items-center">
+                                    <p class="text-sm text-gray-500" id="users-pagination-info">แสดง 1-10 จาก 15 รายการ</p>
+                                    <div class="flex space-x-1" id="users-pagination">
+                                        <button class="pagination-btn" id="users-prev-btn" disabled>ก่อนหน้า</button>
+                                        <button class="pagination-btn active" data-page="1">1</button>
+                                        <button class="pagination-btn" data-page="2">2</button>
+                                        <button class="pagination-btn" id="users-next-btn">ถัดไป</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Settings Tab -->
+                    <div id="settings-tab" class="tab-content">
+                        <div class="bg-white rounded-lg shadow mb-4">
+                            <div class="p-4">
+                                <h2 class="text-lg font-semibold text-gray-800 mb-4">ตั้งค่าระบบ</h2>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="bg-gray-50 rounded-lg p-4">
+                                        <h3 class="text-md font-medium text-gray-800 mb-3">ตั้งค่าทั่วไป</h3>
+                                        <div class="space-y-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อหน่วยงาน</label>
+                                                <input type="text" value="บริษัท ตัวอย่าง จำกัด" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">อีเมลสำหรับการแจ้งเตือน</label>
+                                                <input type="email" value="notify@example.com" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">เบอร์โทรศัพท์ติดต่อ</label>
+                                                <input type="tel" value="02-123-4567" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="bg-gray-50 rounded-lg p-4">
+                                        <h3 class="text-md font-medium text-gray-800 mb-3">ตั้งค่าการแจ้งเตือน</h3>
+                                        <div class="space-y-3">
+                                            <div class="flex items-center justify-between">
+                                                <div>
+                                                    <p class="font-medium text-gray-800">แจ้งเตือนเมื่อมีการแจ้งซ่อมใหม่</p>
+                                                    <p class="text-xs text-gray-500">ส่งอีเมลแจ้งเตือนเมื่อมีการแจ้งซ่อมใหม่</p>
+                                                </div>
+                                                <div class="relative inline-block w-10 mr-2 align-middle select-none">
+                                                    <input type="checkbox" id="notify-new-repair" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                                                    <label for="notify-new-repair" class="toggle-label block overflow-hidden h-6 rounded-full bg-blue-600 cursor-pointer"></label>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="flex items-center justify-between">
+                                                <div>
+                                                    <p class="font-medium text-gray-800">แจ้งเตือนเมื่อมีการมอบหมายงาน</p>
+                                                    <p class="text-xs text-gray-500">ส่งอีเมลแจ้งเตือนเมื่อมีการมอบหมายงานให้ช่างซ่อม</p>
+                                                </div>
+                                                <div class="relative inline-block w-10 mr-2 align-middle select-none">
+                                                    <input type="checkbox" id="notify-assign" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                                                    <label for="notify-assign" class="toggle-label block overflow-hidden h-6 rounded-full bg-blue-600 cursor-pointer"></label>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="flex items-center justify-between">
+                                                <div>
+                                                    <p class="font-medium text-gray-800">แจ้งเตือนเมื่องานซ่อมเสร็จสิ้น</p>
+                                                    <p class="text-xs text-gray-500">ส่งอีเมลแจ้งเตือนเมื่องานซ่อมเสร็จสิ้น</p>
+                                                </div>
+                                                <div class="relative inline-block w-10 mr-2 align-middle select-none">
+                                                    <input type="checkbox" id="notify-complete" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                                                    <label for="notify-complete" class="toggle-label block overflow-hidden h-6 rounded-full bg-blue-600 cursor-pointer"></label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-6 flex justify-end">
+                                    <button class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center" id="save-settings-btn">
+                                        <i class="fas fa-save mr-2"></i>
+                                        <span>บันทึกการตั้งค่า</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- Public Repair Form -->
+    <div id="public-repair-section" class="hidden min-h-screen bg-gray-100 p-4">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center">
+                        <div class="bg-blue-100 p-3 rounded-full mr-4">
+                            <i class="fas fa-tools text-blue-600 text-xl"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800">แบบฟอร์มแจ้งซ่อม</h1>
+                            <p class="text-gray-600">กรอกข้อมูลเพื่อแจ้งซ่อมอุปกรณ์</p>
+                        </div>
+                    </div>
+                    <button id="back-to-login" class="text-blue-600 hover:text-blue-800 flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        <span>กลับไปหน้าเข้าสู่ระบบ</span>
+                    </button>
+                </div>
+                
+                <form id="public-repair-form">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุลผู้แจ้ง <span class="text-red-600">*</span></label>
+                            <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกชื่อ-นามสกุล" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">เบอร์โทรศัพท์ <span class="text-red-600">*</span></label>
+                            <input type="tel" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกเบอร์โทรศัพท์" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">อีเมล</label>
+                            <input type="email" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกอีเมล (ถ้ามี)">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">แผนก/ฝ่าย <span class="text-red-600">*</span></label>
+                            <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกแผนก/ฝ่าย" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ประเภทอุปกรณ์ <span class="text-red-600">*</span></label>
+                        <select class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                            <option value="">เลือกประเภทอุปกรณ์</option>
+                            <option value="computer">คอมพิวเตอร์</option>
+                            <option value="printer">เครื่องพิมพ์</option>
+                            <option value="network">อุปกรณ์เครือข่าย</option>
+                            <option value="ac">เครื่องปรับอากาศ</option>
+                            <option value="electrical">อุปกรณ์ไฟฟ้า</option>
+                            <option value="furniture">เฟอร์นิเจอร์</option>
+                            <option value="other">อื่นๆ</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">รหัสครุภัณฑ์ (ถ้ามี)</label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุรหัสครุภัณฑ์">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ชื่ออุปกรณ์/รายละเอียด <span class="text-red-600">*</span></label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุชื่ออุปกรณ์หรือรายละเอียด" required>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">อาการเสีย/ปัญหาที่พบ <span class="text-red-600">*</span></label>
+                        <textarea rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุอาการเสียหรือปัญหาที่พบ" required></textarea>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">สถานที่ติดตั้ง <span class="text-red-600">*</span></label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุสถานที่ติดตั้ง" required>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ความเร่งด่วน <span class="text-red-600">*</span></label>
+                        <select class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                            <option value="low">ปกติ</option>
+                            <option value="medium">ด่วน</option>
+                            <option value="high">ด่วนมาก</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">รูปภาพประกอบ (ถ้ามี)</label>
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                            <i class="fas fa-cloud-upload-alt text-gray-400 text-3xl mb-2"></i>
+                            <p class="text-sm text-gray-500">ลากไฟล์มาวางที่นี่ หรือ คลิกเพื่อเลือกไฟล์</p>
+                            <p class="text-xs text-gray-400 mt-1">รองรับไฟล์ JPG, PNG ขนาดไม่เกิน 5MB</p>
+                            <input type="file" class="hidden" accept="image/*" multiple>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end">
+                        <button type="button" id="cancel-public-repair" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg mr-2">
+                            ยกเลิก
+                        </button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center">
+                            <i class="fas fa-paper-plane mr-2"></i>
+                            <span>ส่งคำขอแจ้งซ่อม</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Repair Modal -->
+    <div id="new-repair-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden modal">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">แจ้งซ่อมใหม่</h2>
+                <button id="close-repair-modal" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="new-repair-form">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุลผู้แจ้ง <span class="text-red-600">*</span></label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกชื่อ-นามสกุล" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">เบอร์โทรศัพท์ <span class="text-red-600">*</span></label>
+                        <input type="tel" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกเบอร์โทรศัพท์" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">อีเมล</label>
+                        <input type="email" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกอีเมล (ถ้ามี)">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">แผนก/ฝ่าย <span class="text-red-600">*</span></label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกแผนก/ฝ่าย" required>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ประเภทอุปกรณ์ <span class="text-red-600">*</span></label>
+                    <select class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <option value="">เลือกประเภทอุปกรณ์</option>
+                        <option value="computer">คอมพิวเตอร์</option>
+                        <option value="printer">เครื่องพิมพ์</option>
+                        <option value="network">อุปกรณ์เครือข่าย</option>
+                        <option value="ac">เครื่องปรับอากาศ</option>
+                        <option value="electrical">อุปกรณ์ไฟฟ้า</option>
+                        <option value="furniture">เฟอร์นิเจอร์</option>
+                        <option value="other">อื่นๆ</option>
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">รหัสครุภัณฑ์ (ถ้ามี)</label>
+                    <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุรหัสครุภัณฑ์">
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ชื่ออุปกรณ์/รายละเอียด <span class="text-red-600">*</span></label>
+                    <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุชื่ออุปกรณ์หรือรายละเอียด" required>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">อาการเสีย/ปัญหาที่พบ <span class="text-red-600">*</span></label>
+                    <textarea rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุอาการเสียหรือปัญหาที่พบ" required></textarea>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">สถานที่ติดตั้ง <span class="text-red-600">*</span></label>
+                    <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุสถานที่ติดตั้ง" required>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ความเร่งด่วน <span class="text-red-600">*</span></label>
+                    <select class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <option value="low">ปกติ</option>
+                        <option value="medium">ด่วน</option>
+                        <option value="high">ด่วนมาก</option>
+                    </select>
+                </div>
+                
+                <div class="flex justify-end">
+                    <button type="button" id="cancel-new-repair" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg mr-2">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center">
+                        <i class="fas fa-save mr-2"></i>
+                        <span>บันทึก</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Assign Task Modal -->
+    <div id="assign-task-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden modal">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">มอบหมายงานซ่อม</h2>
+                <button class="close-modal text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="assign-task-form">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">รายการที่เลือก</label>
+                    <div class="bg-gray-50 p-3 rounded-lg text-sm text-gray-700" id="selected-tasks-list">
+                        <p>REP-2023-0128 - เครื่องปรับอากาศ - วิชัย มานะ</p>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ช่างซ่อม <span class="text-red-600">*</span></label>
+                    <select class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <option value="">เลือกช่างซ่อม</option>
+                        <option value="tech1">สมศักดิ์ ช่างดี</option>
+                        <option value="tech2">วิชัย ช่างเก่ง</option>
+                        <option value="tech3">มานะ ช่างเทคนิค</option>
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">กำหนดเสร็จ <span class="text-red-600">*</span></label>
+                    <input type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">หมายเหตุ</label>
+                    <textarea rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุหมายเหตุ (ถ้ามี)"></textarea>
+                </div>
+                
+                <div class="flex justify-end">
+                    <button type="button" class="cancel-modal bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg mr-2">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center">
+                        <i class="fas fa-user-plus mr-2"></i>
+                        <span>มอบหมายงาน</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div id="add-user-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden modal">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">เพิ่มผู้ใช้งาน</h2>
+                <button class="close-modal text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="add-user-form">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อผู้ใช้ <span class="text-red-600">*</span></label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกชื่อผู้ใช้" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน <span class="text-red-600">*</span></label>
+                        <input type="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกรหัสผ่าน" required>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุล <span class="text-red-600">*</span></label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกชื่อ-นามสกุล" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">อีเมล <span class="text-red-600">*</span></label>
+                        <input type="email" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกอีเมล" required>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">แผนก/ฝ่าย <span class="text-red-600">*</span></label>
+                        <input type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="กรอกแผนก/ฝ่าย" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">บทบาท <span class="text-red-600">*</span></label>
+                        <select class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                            <option value="">เลือกบทบาท</option>
+                            <option value="admin">ผู้ดูแลระบบ</option>
+                            <option value="manager">ผู้จัดการ</option>
+                            <option value="technician">ช่างซ่อม</option>
+                            <option value="user">ผู้ใช้ทั่วไป</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">สถานะ</label>
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center">
+                            <input type="radio" id="status-active" name="status" value="active" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300" checked>
+                            <label for="status-active" class="ml-2 block text-sm text-gray-700">ใช้งาน</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="radio" id="status-inactive" name="status" value="inactive" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300">
+                            <label for="status-inactive" class="ml-2 block text-sm text-gray-700">ไม่ใช้งาน</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end">
+                    <button type="button" class="cancel-modal bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg mr-2">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center">
+                        <i class="fas fa-save mr-2"></i>
+                        <span>บันทึก</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- View Repair Modal -->
+    <div id="view-repair-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden modal">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">รายละเอียดการแจ้งซ่อม</h2>
+                <button class="close-modal text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <span class="text-sm text-gray-500">รหัสแจ้งซ่อม:</span>
+                        <span class="text-lg font-semibold text-gray-800 ml-2" id="view-repair-id">REP-2023-0128</span>
+                    </div>
+                    <span class="status-badge status-pending" id="view-repair-status">รอดำเนินการ</span>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <p class="text-sm text-gray-500">ผู้แจ้ง</p>
+                        <p class="font-medium text-gray-800" id="view-repair-reporter">วิชัย มานะ</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">แผนก/ฝ่าย</p>
+                        <p class="font-medium text-gray-800" id="view-repair-department">ฝ่ายบุคคล</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">เบอร์โทรศัพท์</p>
+                        <p class="font-medium text-gray-800" id="view-repair-phone">081-234-5678</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">อีเมล</p>
+                        <p class="font-medium text-gray-800" id="view-repair-email">wichai@example.com</p>
+                    </div>
+                </div>
+                
+                <hr class="my-4 border-gray-200">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <p class="text-sm text-gray-500">ประเภทอุปกรณ์</p>
+                        <p class="font-medium text-gray-800" id="view-repair-type">เครื่องปรับอากาศ</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">รหัสครุภัณฑ์</p>
+                        <p class="font-medium text-gray-800" id="view-repair-asset-id">AC-2023-0045</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">ชื่ออุปกรณ์/รายละเอียด</p>
+                        <p class="font-medium text-gray-800" id="view-repair-device">เครื่องปรับอากาศ Daikin 12000 BTU</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">สถานที่ติดตั้ง</p>
+                        <p class="font-medium text-gray-800" id="view-repair-location">ห้องประชุม 2 ชั้น 3</p>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <p class="text-sm text-gray-500">อาการเสีย/ปัญหาที่พบ</p>
+                    <p class="font-medium text-gray-800" id="view-repair-problem">เปิดไม่ติด ไฟแสดงสถานะไม่ทำงาน ได้ยินเสียงคลิกๆ เมื่อกดเปิดเครื่อง</p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <p class="text-sm text-gray-500">วันที่แจ้ง</p>
+                        <p class="font-medium text-gray-800" id="view-repair-date">15/05/2023 10:30</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">ความเร่งด่วน</p>
+                        <p class="font-medium text-red-600" id="view-repair-priority">ด่วนมาก</p>
+                    </div>
+                </div>
+                
+                <hr class="my-4 border-gray-200">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <p class="text-sm text-gray-500">ช่างซ่อม</p>
+                        <p class="font-medium text-gray-800" id="view-repair-technician">-</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">กำหนดเสร็จ</p>
+                        <p class="font-medium text-gray-800" id="view-repair-due-date">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button class="close-modal bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg">
+                    ปิด
+                </button>
+                <button class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center" id="edit-repair-btn">
+                    <i class="fas fa-edit mr-2"></i>
+                    <span>แก้ไข</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Confirmation Modal -->
+    <div id="export-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden modal">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">ยืนยันการส่งออกข้อมูล</h2>
+                <button class="close-modal text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="mb-6">
+                <p class="text-gray-700">คุณต้องการส่งออกข้อมูลงานซ่อมในรูปแบบไฟล์ Excel ใช่หรือไม่?</p>
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button class="cancel-modal bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg">
+                    ยกเลิก
+                </button>
+                <button class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg flex items-center" id="confirm-export-btn">
+                    <i class="fas fa-file-export mr-2"></i>
+                    <span>ยืนยันการส่งออก</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ข้อมูลตัวอย่าง
+        const repairData = [
+            { id: 'REP-2023-0128', device: 'เครื่องปรับอากาศ', problem: 'เปิดไม่ติด ไฟแสดงสถานะไม่ทำงาน', reporter: 'วิชัย มานะ', date: '15/05/2023', status: 'pending' },
+            { id: 'REP-2023-0127', device: 'คอมพิวเตอร์', problem: 'เปิดเครื่องไม่ติด ได้ยินเสียงบี๊บ 3 ครั้ง', reporter: 'สมศรี ใจดี', date: '14/05/2023', status: 'progress' },
+            { id: 'REP-2023-0126', device: 'เครื่องพิมพ์', problem: 'กระดาษติด พิมพ์แล้วมีเส้นดำ', reporter: 'มานี มีสุข', date: '13/05/2023', status: 'completed' },
+            { id: 'REP-2023-0125', device: 'โทรศัพท์', problem: 'สายชำรุด โทรไม่ได้', reporter: 'สมชาย ใจดี', date: '12/05/2023', status: 'cancelled' },
+            { id: 'REP-2023-0124', device: 'จอคอมพิวเตอร์', problem: 'จอกระพริบ ภาพไม่ชัด', reporter: 'วิภา สุขใจ', date: '11/05/2023', status: 'pending' },
+            { id: 'REP-2023-0123', device: 'เครื่องสแกน', problem: 'สแกนแล้วภาพมืด', reporter: 'ประสิทธิ์ มั่นคง', date: '10/05/2023', status: 'progress' },
+            { id: 'REP-2023-0122', device: 'เครื่องปริ้นเตอร์', problem: 'หมึกหมด', reporter: 'สมหมาย ใจดี', date: '09/05/2023', status: 'completed' },
+            { id: 'REP-2023-0121', device: 'เครื่องปรับอากาศ', problem: 'น้ำหยด เย็นไม่เต็มที่', reporter: 'วิชัย มานะ', date: '08/05/2023', status: 'progress' },
+            { id: 'REP-2023-0120', device: 'คอมพิวเตอร์', problem: 'เครื่องช้า โปรแกรมค้าง', reporter: 'สมศรี ใจดี', date: '07/05/2023', status: 'completed' },
+            { id: 'REP-2023-0119', device: 'เครื่องถ่ายเอกสาร', problem: 'กระดาษติด ถ่ายไม่ชัด', reporter: 'มานี มีสุข', date: '06/05/2023', status: 'pending' },
+            { id: 'REP-2023-0118', device: 'โทรศัพท์', problem: 'เสียงแตก ได้ยินไม่ชัด', reporter: 'สมชาย ใจดี', date: '05/05/2023', status: 'cancelled' },
+            { id: 'REP-2023-0117', device: 'จอคอมพิวเตอร์', problem: 'จอดับ ไม่มีสัญญาณ', reporter: 'วิภา สุขใจ', date: '04/05/2023', status: 'completed' },
+            { id: 'REP-2023-0116', device: 'เครื่องสแกน', problem: 'ไม่ทำงาน ไฟไม่ติด', reporter: 'ประสิทธิ์ มั่นคง', date: '03/05/2023', status: 'progress' },
+            { id: 'REP-2023-0115', device: 'เครื่องปริ้นเตอร์', problem: 'พิมพ์แล้วกระดาษติด', reporter: 'สมหมาย ใจดี', date: '02/05/2023', status: 'pending' },
+            { id: 'REP-2023-0114', device: 'เครื่องปรับอากาศ', problem: 'มีกลิ่นเหม็น ไม่เย็น', reporter: 'วิชัย มานะ', date: '01/05/2023', status: 'completed' }
+        ];
+
+        const tasksData = [
+            { id: 'REP-2023-0128', device: 'เครื่องปรับอากาศ', reporter: 'วิชัย มานะ', technician: '', dueDate: '', status: 'pending' },
+            { id: 'REP-2023-0127', device: 'คอมพิวเตอร์', reporter: 'สมศรี ใจดี', technician: 'สมศักดิ์ ช่างดี', dueDate: '16/05/2023', status: 'progress' },
+            { id: 'REP-2023-0126', device: 'เครื่องพิมพ์', reporter: 'มานี มีสุข', technician: 'วิชัย ช่างเก่ง', dueDate: '15/05/2023', status: 'completed' },
+            { id: 'REP-2023-0125', device: 'โทรศัพท์', reporter: 'สมชาย ใจดี', technician: 'มานะ ช่างเทคนิค', dueDate: '14/05/2023', status: 'cancelled' },
+            { id: 'REP-2023-0124', device: 'จอคอมพิวเตอร์', reporter: 'วิภา สุขใจ', technician: '', dueDate: '', status: 'pending' },
+            { id: 'REP-2023-0123', device: 'เครื่องสแกน', reporter: 'ประสิทธิ์ มั่นคง', technician: 'สมศักดิ์ ช่างดี', dueDate: '13/05/2023', status: 'progress' },
+            { id: 'REP-2023-0122', device: 'เครื่องปริ้นเตอร์', reporter: 'สมหมาย ใจดี', technician: 'วิชัย ช่างเก่ง', dueDate: '12/05/2023', status: 'completed' },
+            { id: 'REP-2023-0121', device: 'เครื่องปรับอากาศ', reporter: 'วิชัย มานะ', technician: 'มานะ ช่างเทคนิค', dueDate: '11/05/2023', status: 'progress' },
+            { id: 'REP-2023-0120', device: 'คอมพิวเตอร์', reporter: 'สมศรี ใจดี', technician: 'สมศักดิ์ ช่างดี', dueDate: '10/05/2023', status: 'completed' },
+            { id: 'REP-2023-0119', device: 'เครื่องถ่ายเอกสาร', reporter: 'มานี มีสุข', technician: '', dueDate: '', status: 'pending' },
+            { id: 'REP-2023-0118', device: 'โทรศัพท์', reporter: 'สมชาย ใจดี', technician: 'วิชัย ช่างเก่ง', dueDate: '09/05/2023', status: 'cancelled' },
+            { id: 'REP-2023-0117', device: 'จอคอมพิวเตอร์', reporter: 'วิภา สุขใจ', technician: 'มานะ ช่างเทคนิค', dueDate: '08/05/2023', status: 'completed' },
+            { id: 'REP-2023-0116', device: 'เครื่องสแกน', reporter: 'ประสิทธิ์ มั่นคง', technician: 'สมศักดิ์ ช่างดี', dueDate: '07/05/2023', status: 'progress' },
+            { id: 'REP-2023-0115', device: 'เครื่องปริ้นเตอร์', reporter: 'สมหมาย ใจดี', technician: '', dueDate: '', status: 'pending' },
+            { id: 'REP-2023-0114', device: 'เครื่องปรับอากาศ', reporter: 'วิชัย มานะ', technician: 'วิชัย ช่างเก่ง', dueDate: '06/05/2023', status: 'completed' }
+        ];
+
+        const usersData = [
+            { username: 'admin', name: 'ผู้ดูแลระบบ', email: 'admin@example.com', department: 'ฝ่ายไอที', role: 'ผู้ดูแลระบบ', status: 'active' },
+            { username: 'tech1', name: 'สมศักดิ์ ช่างดี', email: 'somsak@example.com', department: 'ฝ่ายซ่อมบำรุง', role: 'ช่างซ่อม', status: 'active' },
+            { username: 'tech2', name: 'วิชัย ช่างเก่ง', email: 'wichai.tech@example.com', department: 'ฝ่ายซ่อมบำรุง', role: 'ช่างซ่อม', status: 'active' },
+            { username: 'tech3', name: 'มานะ ช่างเทคนิค', email: 'mana@example.com', department: 'ฝ่ายซ่อมบำรุง', role: 'ช่างซ่อม', status: 'active' },
+            { username: 'manager1', name: 'สมหมาย ผู้จัดการ', email: 'sommai@example.com', department: 'ฝ่ายบริหาร', role: 'ผู้จัดการ', status: 'active' },
+            { username: 'user1', name: 'วิชัย มานะ', email: 'wichai@example.com', department: 'ฝ่ายบุคคล', role: 'ผู้ใช้ทั่วไป', status: 'active' },
+            { username: 'user2', name: 'สมศรี ใจดี', email: 'somsri@example.com', department: 'ฝ่ายการตลาด', role: 'ผู้ใช้ทั่วไป', status: 'active' },
+            { username: 'user3', name: 'มานี มีสุข', email: 'manee@example.com', department: 'ฝ่ายบัญชี', role: 'ผู้ใช้ทั่วไป', status: 'active' },
+            { username: 'user4', name: 'สมชาย ใจดี', email: 'somchai@example.com', department: 'ฝ่ายขาย', role: 'ผู้ใช้ทั่วไป', status: 'active' },
+            { username: 'user5', name: 'วิภา สุขใจ', email: 'wipa@example.com', department: 'ฝ่ายจัดซื้อ', role: 'ผู้ใช้ทั่วไป', status: 'active' },
+            { username: 'user6', name: 'ประสิทธิ์ มั่นคง', email: 'prasit@example.com', department: 'ฝ่ายผลิต', role: 'ผู้ใช้ทั่วไป', status: 'inactive' },
+            { username: 'user7', name: 'สมหมาย ใจดี', email: 'sommai.j@example.com', department: 'ฝ่ายขนส่ง', role: 'ผู้ใช้ทั่วไป', status: 'active' }
+        ];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // แสดงกราฟสรุปงานซ่อม
+            const repairChartCtx = document.getElementById('repair-chart').getContext('2d');
+            const repairChart = new Chart(repairChartCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.'],
+                    datasets: [
+                        {
+                            label: 'รอดำเนินการ',
+                            data: [12, 15, 10, 8, 12, 15],
+                            backgroundColor: '#FEF3C7',
+                            borderColor: '#92400E',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'กำลังดำเนินการ',
+                            data: [18, 20, 22, 15, 18, 24],
+                            backgroundColor: '#DBEAFE',
+                            borderColor: '#1E40AF',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'เสร็จสิ้น',
+                            data: [30, 25, 35, 28, 32, 38],
+                            backgroundColor: '#D1FAE5',
+                            borderColor: '#065F46',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'จำนวนงานซ่อม'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'เดือน'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'สรุปงานซ่อมรายเดือน'
+                        }
+                    }
+                }
+            });
+
+            // แสดงการแจ้งเตือน
+            function showNotification(message, type = 'success') {
+                const notification = document.getElementById('notification');
+                const notificationMessage = document.getElementById('notification-message');
+                const notificationBox = notification.querySelector('div');
+                
+                notificationMessage.textContent = message;
+                
+                if (type === 'success') {
+                    notificationBox.classList.remove('bg-red-500');
+                    notificationBox.classList.add('bg-green-500');
+                    notificationBox.querySelector('i').className = 'fas fa-check-circle mr-2';
+                } else if (type === 'error') {
+                    notificationBox.classList.remove('bg-green-500');
+                    notificationBox.classList.add('bg-red-500');
+                    notificationBox.querySelector('i').className = 'fas fa-exclamation-circle mr-2';
+                } else if (type === 'warning') {
+                    notificationBox.classList.remove('bg-green-500', 'bg-red-500');
+                    notificationBox.classList.add('bg-yellow-500');
+                    notificationBox.querySelector('i').className = 'fas fa-exclamation-triangle mr-2';
+                }
+                
+                notification.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    notification.classList.add('hidden');
+                }, 3000);
+            }
+
+            // Toggle password visibility
+            document.getElementById('toggle-password').addEventListener('click', function() {
+                const passwordInput = document.getElementById('password');
+                const icon = this.querySelector('i');
+                
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text';
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    passwordInput.type = 'password';
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            });
+            
+            // Login button - ตรวจสอบรหัสผ่าน
+            document.getElementById('login-btn').addEventListener('click', function() {
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                
+                // ตรวจสอบว่ากรอกข้อมูลหรือไม่
+                if (!username) {
+                    document.getElementById('username-error').classList.remove('hidden');
+                    return;
+                } else {
+                    document.getElementById('username-error').classList.add('hidden');
+                }
+                
+                if (!password) {
+                    document.getElementById('password-error').classList.remove('hidden');
+                    return;
+                } else {
+                    document.getElementById('password-error').classList.add('hidden');
+                }
+                
+                // ตรวจสอบรหัสผ่าน
+                if (username === 'admin' && password === 'admin') {
+                    document.getElementById('login-section').classList.add('hidden');
+                    document.getElementById('dashboard-section').classList.remove('hidden');
+                    showNotification('เข้าสู่ระบบสำเร็จ');
+                    
+                    // โหลดข้อมูลตาราง
+                    loadRepairTable();
+                    loadTasksTable();
+                    loadUsersTable();
+                } else {
+                    document.getElementById('login-error').classList.remove('hidden');
+                }
+            });
+
+            // Enter key for login
+            document.getElementById('password').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('login-btn').click();
+                }
+            });
+            
+            // Public repair button
+            document.getElementById('public-repair-btn').addEventListener('click', function() {
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('public-repair-section').classList.remove('hidden');
+            });
+            
+            // Back to login button
+            document.getElementById('back-to-login').addEventListener('click', function() {
+                document.getElementById('public-repair-section').classList.add('hidden');
+                document.getElementById('login-section').classList.remove('hidden');
+            });
+            
+            // Cancel public repair button
+            document.getElementById('cancel-public-repair').addEventListener('click', function() {
+                document.getElementById('public-repair-section').classList.add('hidden');
+                document.getElementById('login-section').classList.remove('hidden');
+            });
+            
+            // Public repair form submit
+            document.getElementById('public-repair-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                document.getElementById('public-repair-section').classList.add('hidden');
+                document.getElementById('login-section').classList.remove('hidden');
+                showNotification('ส่งคำขอแจ้งซ่อมสำเร็จ');
+            });
+            
+            // Logout buttons
+            document.getElementById('logout-btn').addEventListener('click', function() {
+                document.getElementById('dashboard-section').classList.add('hidden');
+                document.getElementById('login-section').classList.remove('hidden');
+                showNotification('ออกจากระบบสำเร็จ');
+            });
+            
+            document.getElementById('dropdown-logout').addEventListener('click', function() {
+                document.getElementById('dashboard-section').classList.add('hidden');
+                document.getElementById('login-section').classList.remove('hidden');
+                showNotification('ออกจากระบบสำเร็จ');
+            });
+            
+            // User dropdown
+            document.getElementById('user-dropdown').addEventListener('click', function() {
+                document.getElementById('user-dropdown-menu').classList.toggle('hidden');
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!document.getElementById('user-dropdown').contains(e.target)) {
+                    document.getElementById('user-dropdown-menu').classList.add('hidden');
+                }
+            });
+            
+            // Mobile menu button
+            document.getElementById('mobile-menu-btn').addEventListener('click', function() {
+                document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            });
+            
+            // Tab navigation
+            const navLinks = document.querySelectorAll('.nav-link');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Remove active class from all links
+                    navLinks.forEach(link => {
+                        link.classList.remove('bg-blue-700');
+                        link.classList.add('hover:bg-blue-700');
+                    });
+                    
+                    // Add active class to clicked link
+                    this.classList.add('bg-blue-700');
+                    this.classList.remove('hover:bg-blue-700');
+                    
+                    // Hide all tab contents
+                    tabContents.forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    
+                    // Show selected tab content
+                    const tabId = this.getAttribute('data-tab');
+                    document.getElementById(tabId).classList.add('active');
+                    
+                    // Update page title
+                    document.getElementById('page-title').textContent = this.querySelector('span').textContent;
+                });
+            });
+            
+            // Dashboard tab links
+            const dashboardLinks = document.querySelectorAll('a[data-tab]');
+            dashboardLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Hide all tab contents
+                    tabContents.forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    
+                    // Show selected tab content
+                    const tabId = this.getAttribute('data-tab');
+                    document.getElementById(tabId).classList.add('active');
+                    
+                    // Update active nav link
+                    navLinks.forEach(link => {
+                        link.classList.remove('bg-blue-700');
+                        link.classList.add('hover:bg-blue-700');
+                        
+                        if (link.getAttribute('data-tab') === tabId) {
+                            link.classList.add('bg-blue-700');
+                            link.classList.remove('hover:bg-blue-700');
+                        }
+                    });
+                    
+                    // Update page title
+                    document.getElementById('page-title').textContent = this.textContent.trim();
+                });
+            });
+            
+            // New repair button
+            document.getElementById('new-repair-btn').addEventListener('click', function() {
+                document.getElementById('new-repair-modal').classList.remove('hidden');
+            });
+            
+            // Close repair modal
+            document.getElementById('close-repair-modal').addEventListener('click', function() {
+                document.getElementById('new-repair-modal').classList.add('hidden');
+            });
+            
+            // Cancel new repair
+            document.getElementById('cancel-new-repair').addEventListener('click', function() {
+                document.getElementById('new-repair-modal').classList.add('hidden');
+            });
+            
+            // New repair form submit
+            document.getElementById('new-repair-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                document.getElementById('new-repair-modal').classList.add('hidden');
+                
+                // เพิ่มข้อมูลใหม่
+                const newRepair = {
+                    id: `REP-2023-${Math.floor(1000 + Math.random() * 9000)}`,
+                    device: this.querySelector('select').options[this.querySelector('select').selectedIndex].text,
+                    problem: this.querySelector('textarea').value,
+                    reporter: this.querySelector('input[placeholder="กรอกชื่อ-นามสกุล"]').value,
+                    date: new Date().toLocaleDateString('th-TH'),
+                    status: 'pending'
+                };
+                
+                repairData.unshift(newRepair);
+                loadRepairTable();
+                
+                showNotification('บันทึกการแจ้งซ่อมสำเร็จ');
+            });
+            
+            // Assign task button
+            document.getElementById('assign-task-btn').addEventListener('click', function() {
+                // ตรวจสอบว่ามีการเลือกรายการหรือไม่
+                const selectedTasks = document.querySelectorAll('#tasks-table-body input[type="checkbox"]:checked:not(#select-all-tasks)');
+                
+                if (selectedTasks.length === 0) {
+                    showNotification('กรุณาเลือกรายการที่ต้องการมอบหมายงาน', 'warning');
+                    return;
+                }
+                
+                // แสดงรายการที่เลือกในโมดัล
+                const selectedTasksList = document.getElementById('selected-tasks-list');
+                selectedTasksList.innerHTML = '';
+                
+                selectedTasks.forEach(checkbox => {
+                    const row = checkbox.closest('tr');
+                    const id = row.querySelector('td:nth-child(2)').textContent;
+                    const device = row.querySelector('td:nth-child(3)').textContent;
+                    const reporter = row.querySelector('td:nth-child(4)').textContent;
+                    
+                    const item = document.createElement('p');
+                    item.textContent = `${id} - ${device} - ${reporter}`;
+                    selectedTasksList.appendChild(item);
+                });
+                
+                document.getElementById('assign-task-modal').classList.remove('hidden');
+            });
+            
+            // Assign task form submit
+            document.getElementById('assign-task-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const selectedTasks = document.querySelectorAll('#tasks-table-body input[type="checkbox"]:checked:not(#select-all-tasks)');
+                const technician = this.querySelector('select').options[this.querySelector('select').selectedIndex].text;
+                const dueDate = this.querySelector('input[type="date"]').value;
+                const formattedDueDate = new Date(dueDate).toLocaleDateString('th-TH');
+                
+                // อัปเดตข้อมูล
+                selectedTasks.forEach(checkbox => {
+                    const row = checkbox.closest('tr');
+                    const id = row.querySelector('td:nth-child(2)').textContent;
+                    
+                    // อัปเดตข้อมูลในอาร์เรย์
+                    const taskIndex = tasksData.findIndex(task => task.id === id);
+                    if (taskIndex !== -1) {
+                        tasksData[taskIndex].technician = technician;
+                        tasksData[taskIndex].dueDate = formattedDueDate;<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96518ad721025805',t:'MTc1MzUwODIxOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
