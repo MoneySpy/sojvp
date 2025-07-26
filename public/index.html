@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Repair Management System</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>🖥️ ระบบแจ้งซ่อมและติดตามสถานะ</h1>
+  <nav>
+    <a href="#" onclick="showDashboard()">Dashboard</a> |
+    <a href="#" onclick="showRepair()">แจ้งซ่อม</a> |
+    <a href="#" onclick="showStock()">สต็อกอะไหล่</a> |
+    <a href="#" onclick="showEquipment()">ครุภัณฑ์</a> |
+    <a href="#" onclick="showPurchase()">สั่งซื้อ</a> |
+    <a href="#" onclick="showUsers()">ผู้ใช้งาน</a> |
+    <a href="#" onclick="showProfile()">โปรไฟล์</a> |
+    <span id="auth-menu"></span>
+  </nav>
+  <div id="app">
+    <!-- SPA: ส่วนแสดง Dashboard, ฟอร์มแจ้งซ่อม, ตาราง ฯลฯ -->
+  </div>
+  <script src="scripts/main.js"></script>
+</body>
+</html>
