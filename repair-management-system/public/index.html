@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Repair Management System</title>
+</head>
+<body>
+  <!-- ตัวอย่างปุ่มแจ้งซ่อมใหม่ -->
+  <button onclick="testNotify()">แจ้งซ่อมใหม่ (ทดสอบส่งอีเมล)</button>
+
+  <script>
+  function notifyRepairCreated(repairInfo) {
+    fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: 'admin@example.com', // เปลี่ยนเป็นอีเมลผู้รับจริง
+        subject: 'แจ้งเตือนงานซ่อมใหม่',
+        message: `แจ้งซ่อมใหม่: ${repairInfo.device} - ${repairInfo.problem} โดย ${repairInfo.reporter}`
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        alert('ส่งอีเมลแจ้งเตือนสำเร็จ');
+      } else {
+        alert('ส่งอีเมลไม่สำเร็จ: ' + data.error);
+      }
+    });
+  }
+
+  // ฟังก์ชันทดสอบ
+  function testNotify() {
+    notifyRepairCreated({
+      device: 'Printer',
+      problem: 'ไม่สามารถพิมพ์ได้',
+      reporter: 'สมชาย ใจดี'
+    });
+  }
+  </script>
+</body>
+</html>
